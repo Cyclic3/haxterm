@@ -370,6 +370,12 @@ public:
       } { refresh_all(); return true; }
       case InputEscaped: {
         switch (c) {
+          case 'o':
+          case KEY_RIGHT:
+            escape_state = OutputEscaped;
+            update_out();
+            break;
+
           case 's':
             escape_state = Unescaped;
             input_mode = input_mode_t::Standard;
@@ -396,6 +402,12 @@ public:
       } { update_in(); refresh_all(); return true; }
       case OutputEscaped: {
         switch (c) {
+          case 'i':
+          case KEY_LEFT:
+            escape_state = InputEscaped;
+            update_in();
+            break;
+
           case 's':
             escape_state = Unescaped;
             output_mode = output_mode_t::Standard;
