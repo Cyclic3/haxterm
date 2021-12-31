@@ -7,6 +7,7 @@
 
 #include <array>
 #include <charconv>
+#include <fstream>
 #include <iostream>
 
 using namespace std::string_view_literals;
@@ -31,6 +32,7 @@ private:
     Standard,
     Hexadecimal,
     AssembleFile,
+    ReadFile,
     // Used for looking through the output
     Browse
   };
@@ -50,8 +52,9 @@ private:
     OldInput = 5,
     MarkedOutput = 6,
     AssembleFile = 7,
+    ReadFile = 8,
 
-    MAX_COLOUR = 7
+    MAX_COLOUR = 8
   };
 
   enum escape_state_t : int {
@@ -71,6 +74,7 @@ private:
     { COLOR_RED | 8, COLOR_BLACK }, // old
     { COLOR_YELLOW | 8, COLOR_BLACK }, // marked
     { COLOR_BLACK, COLOR_MAGENTA }, // asm
+    { COLOR_BLACK, COLOR_CYAN }, // file
   }};
 
   struct interaction_t {
@@ -176,6 +180,11 @@ private:
       case input_mode_t::AssembleFile:
         wprintw(in_info_win, "assembly file");
         wbkgd(in_info_win, COLOR_PAIR(colours_t::AssembleFile));
+        break;
+
+      case input_mode_t::ReadFile:
+        wprintw(in_info_win, "read file");
+        wbkgd(in_info_win, COLOR_PAIR(colours_t::ReadFile));
         break;
 
       case input_mode_t::Standard:
@@ -296,7 +305,21 @@ private:
         target->write(interactions.back().buf).wait();
       } break;
 
-      default: abort();
+      case input_mode_t::ReadFile: {
+        auto rstrip_end_iter = std::find_if_not(input_line.rbegin(), input_line.rend(), ::isspace);
+        auto rstring_end = input_line.rend() - rstrip_end_iter;
+        auto path = input_line.substr(0, rstring_end);
+        // Modified from: https://stackoverflow.com/a/36659103
+        std::basic_ifstream<char> ifs{path, std::ios::binary};
+        if (!ifs)
+          return;
+
+        interactions.push_back({.was_us = true, .buf = std::vector<uint8_t>(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>())});
+
+        target->write(interactions.back().buf).wait();
+      } break;
+
+      default: throw std::logic_error{"Tried to flush with unknown input mode"};
     }
 
     // Grumble grumble implementation defined grumble grumble
@@ -370,6 +393,10 @@ public:
       } { refresh_all(); return true; }
       case InputEscaped: {
         switch (c) {
+          case 'i':
+          case KEY_LEFT:
+            return true;
+
           case 'o':
           case KEY_RIGHT:
             escape_state = OutputEscaped;
@@ -384,6 +411,11 @@ public:
           case 'x':
             escape_state = Unescaped;
             input_mode = input_mode_t::Hexadecimal;
+            break;
+
+          case 'f':
+            escape_state = Unescaped;
+            input_mode = input_mode_t::ReadFile;
             break;
 
           case 'b':
@@ -407,6 +439,10 @@ public:
             escape_state = InputEscaped;
             update_in();
             break;
+
+          case 'o':
+          case KEY_RIGHT:
+            return true;
 
           case 's':
             escape_state = Unescaped;
